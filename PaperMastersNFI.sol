@@ -6,8 +6,13 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Metadata.sol";
 
 contract PaperMastersNFI is ERC721, Ownable {
-    string private _setBaseURI;
-    uint256 private identityFee;
+    event identityFeeChanged(uint256 identityFee);
+    event Log(uint256 gasLeftLeft);
+    event DonationMade(uint256 amount, uint256 balance, address donationSender, uint256 totalDonationsBySender);
+    event Withdraw(uint256 amount, uint256 balance, address withdrawAddress);
+    event Pause();
+    event Unpause();
+    event NFIMinted(uint256 chainId, address indexed _from, uint256 tokenId, uint256 timeStamp, uint256 contractFee, identity identityStruct);
 
     struct identity
     {
@@ -25,15 +30,29 @@ contract PaperMastersNFI is ERC721, Ownable {
     }
 
     identity[] _dictionaryNFIs;
+    string private _setBaseURI;
+    uint256 private identityFee;
     mapping(address => uint256) totalIdentities;
     mapping(address => uint256) _supportPMDonations;
 
     bool internal locked;
+    bool public paused = false;
+    
     modifier noReentrant() {
         require(!locked, "No re-entrancy");
         locked = true;
         _;
         locked = false;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused);
+        _;
+    }
+
+    modifier whenPaused() {
+        require(paused);
+        _;
     }
     // modifier onlyOwner() {
     //     require(msg.sender == owner, "Message sender must be the contract's owner.");
@@ -42,7 +61,19 @@ contract PaperMastersNFI is ERC721, Ownable {
     constructor() ERC721("papermasters.io", "NFI") {
         _setBaseURI = "www.papermasters.io/identity";
         identityFee = 100000000000000000;
-        _dictionaryNFIs.push(identity(block.chainid, address(this), '', '', '', '', '', '', '', '', block.timestamp));
+        _dictionaryNFIs.push(identity({
+            chainId: block.chainid,
+            walletAccount: address(this),
+            name: "",
+            email: "",
+            profession: "",
+            organization: "",
+            slogan: "",
+            website: "",
+            uniqueYou: "",
+            bgRGB: "",
+            originDate: block.timestamp
+        }));
     }
 
     function getChainId() public view returns (uint256) {
@@ -103,13 +134,10 @@ contract PaperMastersNFI is ERC721, Ownable {
         identityFee = val;
         emit identityFeeChanged(val);
     }
-    event identityFeeChanged(uint256 identityFee);
 
     fallback() external payable {
         emit Log(gasleft());
     }
-
-    event Log(uint256 gasLeftLeft);
 
     receive() external payable {}
 
@@ -118,8 +146,6 @@ contract PaperMastersNFI is ERC721, Ownable {
         _supportPMDonations[msg.sender] += msg.value;
         emit DonationMade(amount, address(this).balance, msg.sender, _supportPMDonations[msg.sender]);
     }
-
-    event DonationMade(uint256 amount, uint256 balance, address donationSender, uint256 totalDonationsBySender);
 
     function getBalance() public view onlyOwner returns (uint) {
         return address(this).balance;
@@ -132,35 +158,19 @@ contract PaperMastersNFI is ERC721, Ownable {
         emit Withdraw(amount, address(this).balance, msg.sender);
     }
 
-    event Withdraw(uint256 amount, uint256 balance, address withdrawAddress);
-
     function totalSupply() public view returns (uint256) {
         return _dictionaryNFIs.length;
     }
 
-    bool public paused = false;
-
-    modifier whenNotPaused() {
-        require(!paused);
-        _;
-    }
-    modifier whenPaused() {
-        require(paused);
-        _;
-    }
     function pause() onlyOwner whenNotPaused public {
         paused = true;
         emit Pause();
     }
 
-    event Pause();
-
     function unpause() onlyOwner whenPaused public {
         paused = false;
         emit Unpause();
     }
-
-    event Unpause();
 
     function mintNFI(
         string memory _name,
@@ -178,17 +188,17 @@ contract PaperMastersNFI is ERC721, Ownable {
         require(!addressHasTokenBool(msg.sender), " Wallet already has an NFI! You get one per wallet account");
 
         identity memory _identity = identity({
-        chainId : block.chainid,
-        walletAccount : msg.sender,
-        name : _name,
-        email : _email,
-        profession : _profession,
-        organization : _organization,
-        slogan : _slogan,
-        website : _website,
-        uniqueYou : _uniqueYou,
-        bgRGB : _bgRGB,
-        originDate : block.timestamp
+            chainId : block.chainid,
+            walletAccount : msg.sender,
+            name : _name,
+            email : _email,
+            profession : _profession,
+            organization : _organization,
+            slogan : _slogan,
+            website : _website,
+            uniqueYou : _uniqueYou,
+            bgRGB : _bgRGB,
+            originDate : block.timestamp
         });
 
         _dictionaryNFIs.push(_identity);
@@ -198,8 +208,6 @@ contract PaperMastersNFI is ERC721, Ownable {
 
         emit NFIMinted(block.chainid, msg.sender, newTokenID, block.timestamp, msg.value, _identity);
     }
-
-    event NFIMinted(uint256 chainId, address indexed _from, uint256 tokenId, uint256 timeStamp, uint256 contractFee, identity identityStruct);
 
     function setApprovalForAll(address operator, bool approved) public virtual override onlyOwner {}
 
